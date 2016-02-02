@@ -1,0 +1,9 @@
+[package]
+authors = ["Machtan <jako3047@gmail.com>"]
+name = "mobitool"
+version = "0.1.0"
+
+[dependencies]
+argonaut = "0.7"
+byteorder = "0.4.2"
+chrono = "0.2.17"
