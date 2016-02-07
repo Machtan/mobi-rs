@@ -2,10 +2,10 @@
 
 extern crate byteorder;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Write};
 
 
-use byteorder::{ReadBytesExt, BigEndian};
+use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
 
 pub fn read_unmaxed_u32(source: &mut Read)
         -> Result<Option<u32>, byteorder::Error> {
@@ -42,6 +42,22 @@ pub fn read_string(source: &mut Read, len: u64) -> Result<String, io::Error> {
     let mut buf = String::new();
     try!(source.take(len).read_to_string(&mut buf));
     Ok(buf)
+}
+
+pub fn write_u32_be(source: &mut Write, val: u32) -> Result<(), byteorder::Error> {
+    source.write_u32::<BigEndian>(val)
+}
+
+pub fn write_i32_be(source: &mut Write, val: i32) -> Result<(), byteorder::Error> {
+    source.write_i32::<BigEndian>(val)
+}
+
+pub fn write_u16_be(source: &mut Write, val: u16) -> Result<(), byteorder::Error> {
+    source.write_u16::<BigEndian>(val)
+}
+
+pub fn write_u24_be(source: &mut Write, val: u32) -> Result<(), byteorder::Error> {
+    source.write_uint::<BigEndian>(val as u64, 3)
 }
 
 /// Creates an enum with the given variants, where each variant can be

@@ -5,9 +5,9 @@ extern crate byteorder;
 
 use std::fmt;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Write};
 use chrono::{NaiveDateTime};
-use byteorder::{ReadBytesExt, BigEndian};
+use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
 use common::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -87,7 +87,6 @@ impl PalmDbHeader {
     
         let file_type = try!(read_string(source, 4));
         let creator_program = try!(read_string(source, 4));
-        println!("Type: {} Creator: {}", file_type, creator_program);
         assert_eq!(file_type, String::from("BOOK"));
         assert_eq!(creator_program, String::from("MOBI"));
         let content_type = PalmDbType::Mobi;
@@ -139,5 +138,30 @@ impl PalmDbHeader {
                 println!("{}", self.records[i]);
             }
         }
+    }
+    
+    pub fn write_to(&self, output: &mut Write) -> Result<(), io::Error> {
+        try!(output.write_all(&self.name[..]));
+        try!(output.write_all(&[0x00]));
+        try!(write_u16_be(output, self.attributes));
+        try!(write_u16_be(output, self.version));
+        try!(write_u32_be(output, self.creation_date.timestamp() as u32));
+        try!(write_u32_be(output, self.modification_date.timestamp() as u32));
+        try!(write_u32_be(output, self.backup_date.timestamp() as u32));
+        try!(write_u32_be(output, self.modification_number));
+        try!(write_u32_be(output, self.app_info_offset.unwrap_or(0)));
+        try!(write_u32_be(output, self.sort_info_offset.unwrap_or(0)));
+        try!(output.write_all(self.content_type.value().as_bytes()));
+        try!(write_u32_be(output, self.unique_id_seed));
+        try!(write_u32_be(output, self.next_record_list_id));
+        try!(write_u16_be(output, self.records.len() as u16));
+        for record in self.records.iter() {
+            try!(write_u32_be(output, record.data_offset));
+            try!(output.write_all(&[record.attributes]));
+            try!(write_u24_be(output, record.id));
+        }
+        try!(output.write_all(&[0x00, 0x00])); // Padding (from mobileread)
+        
+        Ok(())
     }
 }
