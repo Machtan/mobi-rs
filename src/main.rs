@@ -16,19 +16,90 @@ use std::io;
 use std::io::{BufReader, Read, Write, Seek, SeekFrom};
 use std::fs::File;
 use std::path::Path;
-use argonaut::{Parser, Arg};
-use argonaut::ParseStatus::{Interrupted, Parsed};
+use std::process;
+use argonaut::{ArgDef, parse, ParseError, help_arg, version_arg};
 use byteorder::{ReadBytesExt, BigEndian};
 use common::*;
-use palmdb::PalmDbHeader;
+use palmdb::PalmdbHeader;
 use mobi::MobiHeader;
 use exth_tags::ExthTag;
+
+#[derive(Debug, Clone, Copy)]
+#[repr(i32)]
+pub enum ErrorCode {
+    ParseFailed = 1,
+    Unspecified = 2,
+}
+
+static mut ERROR_CODE: Option<ErrorCode> = None;
+
+fn main() {
+    mobi_main();
+    if let Some(code) = unsafe { ERROR_CODE } {
+        process::exit(code as i32);
+    }
+}
+
+fn print_mobi_info(filename: &str) {
+    let path = Path::new(filename);
+    let file = match File::open(&path) {
+        Ok(f) => f,
+        Err(reason) => {
+            println!("Could not open file '{}'", filename);
+            unsafe {
+                ERROR_CODE = Some(ErrorCode::Unspecified);
+            }
+            return ();
+        },
+    };
+    let mut reader = BufReader::new(file);
+    read_mobi(&mut reader).expect("Something went wrong:");
+}
+
+fn mobi_main() {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    
+    let description = "
+        Tool to work with e-books in the MOBI format.
+    ";
+    
+    match parse("mobi", &args, vec![
+        ArgDef::cmd("info", |program, args| {
+            let mut filename = String::new();
+            
+            parse(program, args, vec![
+                ArgDef::pos("filename", &mut filename)
+                    .help("The file to print info about."),
+                
+                help_arg("
+                    Prints all metadata of a MOBI file.
+                "),
+            ])?;
+            
+            print_mobi_info(&filename);
+            
+            Ok(())
+        })
+        .help("Prints all metadata of a MOBI file."),
+        
+        help_arg(description),
+        version_arg(),
+    ]) {
+        Ok(_) => {},
+        Err(ParseError::Interrupted(_)) => return,
+        Err(_) => {
+            unsafe {
+                ERROR_CODE = Some(ErrorCode::ParseFailed);
+            }
+        },
+    }
+}
 
 
 fn read_mobi<R>(source: &mut R) -> Result<(), io::Error> where R: Read + Seek {    
     println!("====================== MOBI Information =====================");
         
-    let palm_db_header = try!(PalmDbHeader::read_from(source));
+    let palm_db_header = try!(PalmdbHeader::read_from(source));
     palm_db_header.print_info();
     
     let first = palm_db_header.records[0];
@@ -138,117 +209,35 @@ fn read_compressed_record<R>(source: &mut R, data_offset: u32)
     Ok(())
 }
 
-/// Parses arguments for the 'info' subcommand
-fn parse_info_subcommand(args: &[&str]) {
-    let a_mobi_file = Arg::positional("mobi_file");
-    
-    let mut parser = Parser::new();
-    parser.add(&a_mobi_file).unwrap();
-    let usage = "Usage: mobitool info mobi_file";
-    
-    match parser.parse(args) {
-        Ok(Parsed(parsed)) => {
-            let mobi_file = parsed.positional("mobi_file").unwrap();
-            
-            let path = Path::new(mobi_file);
-            let file = match File::open(&path) {
-                Ok(f) => f,
-                Err(reason) => {
-                    println!("Could not open file '{}'", mobi_file);
-                    println!("{}", usage);
-                    return ();
-                },
-            };
-            let mut reader = BufReader::new(file);
-            read_mobi(&mut reader).expect("Something went wrong:");
-        },
-        Ok(Interrupted(_)) => {},
-        Err(reason) => {
-            println!("Parse error: {:?}", reason);
-            println!("{}", usage);
+fn compare_bytes(actual: &[u8], expected: &[u8]) {
+    for i in 0 .. expected.len() {
+        if i > actual.len() {
+            panic!("The actual buffer lacks bytes at {}", i);
+        }
+        if actual[i] != expected[i] {
+            panic!("Found difference at byte {}!", i);
         }
     }
 }
 
-/*fn main() {
-    let arg_vec: Vec<_> = env::args().skip(1).collect();
-    let mut args: Vec<&str> = Vec::new();
-    for arg in arg_vec.iter() {
-        args.push(arg);
-    }
-    
-    let a_command = Arg::positional("command");
-    let a_args = Arg::optional_trail();
-    let a_help = Arg::named_and_short("help", 'h').interrupt();
-    let a_version = Arg::named("version").interrupt();
-
-    let mut parser = Parser::new();
-    parser.add(&a_command).unwrap();
-    parser.add(&a_args).unwrap();
-    parser.add(&a_help).unwrap();
-    parser.add(&a_version).unwrap();
-    let usage = "Usage: mobitool <info> [args...]";
-    let help = "\
-Required arguments:
-command         The command to run. 
-                info | (tbd...)
-
-[ args... ]     Arguments for the subcommand.
-
-Optional arguments:
---version       Show the SemVer version of this tool.
---help | -h     Show this help message.\
-    ";
-    
-    match parser.parse(&args) {
-        Ok(Parsed(parsed)) => {
-            let command = parsed.positional("command").unwrap();
-            let args = parsed.trail().unwrap();
-            match command {
-                "info" => parse_info_subcommand(&args),
-                other => {
-                    println!("'{}' isn't a valid command", other);
-                    println!("{}", usage);
-                }
-            }
-            
-        },
-        Ok(Interrupted("help")) => {
-            println!("{}", usage);
-            println!("");
-            println!("{}", help);
-        },
-        Ok(Interrupted("version")) => {
-            println!("{}", env!("CARGO_PKG_VERSION"));
-        },
-        Ok(Interrupted(_)) => unimplemented!(),
-        Err(reason) => {
-            println!("Parse error: {:?}", reason);
-            println!("{}", usage);
-        },
-        
-    }
-}*/
-
-fn main() {
+fn test_headers() {
     let palmdb_source = include_bytes!("palmdb_header.bin");
     let mut mobi_source = include_bytes!("mobi_header.bin");
     let mut exth_source = include_bytes!("exth_header.bin");
-    let palm_db_header = PalmDbHeader::read_from(&mut &palmdb_source[..])
-        .expect("could not read palm db header");
+    
+    let palm_db_header = PalmdbHeader::read_from(&mut &palmdb_source[..])
+        .expect("Could not read palm db header");
     palm_db_header.print_info();
     let mut header_buf: Vec<u8> = Vec::new();
     palm_db_header.write_to(&mut header_buf)
         .expect("could not write palm db header");
-
-    for i in 0 .. palmdb_source.len() {
-        if i > header_buf.len() {
-            panic!("The written header lacks bytes at {}", i);
-        }
-        if header_buf[i] != palmdb_source[i] {
-            panic!("Found difference in headers at byte {}!", i);
-        }
-    }
+    compare_bytes(&header_buf[..], palmdb_source);
+    println!("");
+    
+    let mobi_header = MobiHeader::read_from(&mut &mobi_source[..])
+        .expect("Could not read mobi header");
+    mobi_header.print_info();
+    
     //assert_eq!(&header_buf[..], &palmdb_source[..]);
     
     

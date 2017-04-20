@@ -1,9 +1,9 @@
 [package]
 authors = ["Machtan <jako3047@gmail.com>"]
-name = "mobitool"
+name = "mobi"
 version = "0.1.0"
 
 [dependencies]
-argonaut = "0.7"
+argonaut = { path = "../argonaut" }
 byteorder = "0.4.2"
 chrono = "0.2.17"
