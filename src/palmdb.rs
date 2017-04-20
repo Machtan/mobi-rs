@@ -33,7 +33,7 @@ valued_enum! {
 /// The Palm Database format header. 
 /// The struct only supports MOBI.
 #[derive(Debug)]
-pub struct PalmDbHeader {
+pub struct PalmdbHeader {
     pub name: [u8; 31], // Null-terminated string * by the program *
     pub attributes: u16,
     pub version: u16,
@@ -48,10 +48,10 @@ pub struct PalmDbHeader {
     pub next_record_list_id: u32,
     pub records: Vec<Record>,
 }
-impl PalmDbHeader {
+impl PalmdbHeader {
     
     /// Reads a Palm database header from the given source
-    pub fn read_from(source: &mut Read) -> Result<PalmDbHeader, io::Error> {
+    pub fn read_from(source: &mut Read) -> Result<PalmdbHeader, io::Error> {
         let mut name_buf = [0; 32];
         try!(source.read(&mut name_buf));
         let mut name: [u8; 31] = [0; 31];
@@ -106,7 +106,7 @@ impl PalmDbHeader {
                 attributes: attributes } );
         }
     
-        Ok(PalmDbHeader {
+        Ok(PalmdbHeader {
             name: name, // Null-terminated string * by the program *
             attributes: attributes,
             version: version,
@@ -125,6 +125,7 @@ impl PalmDbHeader {
     
     /// Prints the relevant information about this database header
     pub fn print_info(&self) {
+        println!("===== PalmDB header =====");
         let name = String::from_utf8_lossy(read_until_zero(&self.name));
         println!("PalmDB name: {}", name);
         println!("Version: {}", self.version);
